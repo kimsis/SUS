@@ -49,11 +49,11 @@ class MixtureOfGaussians(BackgroundSubtractor):
 
     def __init__(
         self,
-        history: int = 50,
-        var_threshold: float = 8.0,
+        history: int = 25,
+        var_threshold: float = 5.0,
         detect_shadows: bool = False,
         learning_rate: float = -1,
-        morph_kernel_size: int = 7,
+        morph_kernel_size: int = 5,
     ):
         self.history = history
         self.var_threshold = var_threshold

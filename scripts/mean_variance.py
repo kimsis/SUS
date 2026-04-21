@@ -43,7 +43,7 @@ class MeanVariance(BackgroundSubtractor):
 
     def __init__(
         self,
-        learning_rate: float = 0.01,
+        learning_rate: float = 0.1,
         k: float = 2.5,
         warmup_frames: int = 30,
         min_variance: float = 16.0,
