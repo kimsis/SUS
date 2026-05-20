@@ -32,10 +32,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from scripts.bg_subtractor_base import BackgroundSubtractor
-from scripts.frame_differencing import FrameDifferencing
-from scripts.mean_variance import MeanVariance
-from scripts.mixture_of_gaussians import MixtureOfGaussians
+from scripts.background_subtraction import BackgroundSubtractor, FrameDifferencing, MeanVariance, MixtureOfGaussians
 from scripts.video_utils import draw_label, resize_for_display, get_video_sources
 
 

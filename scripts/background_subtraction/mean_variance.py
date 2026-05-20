@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from scripts.bg_subtractor_base import BackgroundSubtractor
+from scripts.background_subtraction.bg_subtractor_base import BackgroundSubtractor
 
 
 class MeanVariance(BackgroundSubtractor):
