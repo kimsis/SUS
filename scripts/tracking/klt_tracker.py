@@ -86,8 +86,10 @@ class KLTTracker(Tracker):
         cluster_radius: int = 45,
         min_cluster_pts: int = 3,
         redetect_every: int = 15,
-        min_blob_area: int = 1500,
-        min_side: int = 25,
+        min_blob_area: int = 3000,
+        max_blob_area: int = 30000,
+        min_side: int = 50,
+        max_side: int = 180,
         max_trajectory: int = 60,
         warmup_frames: int = 25,
     ):
@@ -95,7 +97,9 @@ class KLTTracker(Tracker):
         self._min_cluster_pts = min_cluster_pts
         self._redetect_every = redetect_every
         self._min_blob_area = min_blob_area
+        self._max_blob_area = max_blob_area
         self._min_side = min_side
+        self._max_side = max_side
         self._max_trajectory = max_trajectory
         self._warmup_frames = warmup_frames
 
@@ -213,12 +217,15 @@ class KLTTracker(Tracker):
         contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL,
                                        cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
-            if cv2.contourArea(cnt) < self._min_blob_area:
+            area = cv2.contourArea(cnt)
+            if area < self._min_blob_area or area > self._max_blob_area:
                 continue
 
             # Restrict feature detection to this contour's bounding box.
             bx, by, bw, bh = cv2.boundingRect(cnt)
             if bw < self._min_side or bh < self._min_side:
+                continue
+            if bw > self._max_side or bh > self._max_side:
                 continue
             roi_mask = np.zeros((bh, bw), np.uint8)
             shifted = cnt - np.array([[[bx, by]]])

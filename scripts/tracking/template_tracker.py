@@ -53,8 +53,10 @@ class TemplateTracker(Tracker):
 
     def __init__(
         self,
-        min_blob_area: int = 1500,
-        min_side: int = 25,
+        min_blob_area: int = 3000,
+        max_blob_area: int = 30000,
+        min_side: int = 50,
+        max_side: int = 180,
         search_pad: int = 60,
         match_threshold: float = 0.45,
         max_miss: int = 5,
@@ -67,7 +69,9 @@ class TemplateTracker(Tracker):
         warmup_frames: int = 25,
     ):
         self._min_blob_area = min_blob_area
+        self._max_blob_area = max_blob_area
         self._min_side = min_side
+        self._max_side = max_side
         self._search_pad = search_pad
         self._match_threshold = match_threshold
         self._max_miss = max_miss
@@ -171,10 +175,15 @@ class TemplateTracker(Tracker):
         for cnt in sorted(contours, key=cv2.contourArea, reverse=True):
             if len(self._tracks) >= self._max_tracks:
                 break
-            if cv2.contourArea(cnt) < self._min_blob_area:
+            area = cv2.contourArea(cnt)
+            if area < self._min_blob_area:
                 break
+            if area > self._max_blob_area:
+                continue
             bx, by, bw, bh = cv2.boundingRect(cnt)
             if bw < self._min_side or bh < self._min_side:
+                continue
+            if bw > self._max_side or bh > self._max_side:
                 continue
             if not self._is_new(bx, by, bx + bw, by + bh):
                 continue
