@@ -133,9 +133,13 @@ def resize_for_display(frame, max_width=1920, max_height=1080):
 def get_video_sources(args):
     """
     Get list of video sources based on arguments.
-    
+
+    Supports:
+        --video_folder  folder of .mp4 files
+        --video_path    single video file or '0' for camera
+
     Returns:
-        list: List of video sources (file paths or camera index)
+        list: Video file paths or camera index.
     """
     if args.video_folder:
         folder = Path(args.video_folder)
@@ -145,14 +149,13 @@ def get_video_sources(args):
             return []
         print(f"Found {len(video_files)} video(s)")
         return [str(v) for v in video_files]
-    elif args.video_path:
-        # Single video or camera
+
+    if args.video_path:
         if args.video_path == '0':
-            if args.video_folder:
-                print("Error: Cannot use camera with --video_folder option")
-                return []
             camera_index = list_cameras()
             return [camera_index] if camera_index is not None else []
         return [args.video_path]
-    else:
-        return []
+
+    return []
+
+
