@@ -249,5 +249,10 @@ def _iou(a: tuple, b: tuple) -> float:
     inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
     if inter == 0:
         return 0.0
-    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
-    return inter / union if union > 0 else 0.0
+    area_a = (ax2 - ax1) * (ay2 - ay1)
+    area_b = (bx2 - bx1) * (by2 - by1)
+    union = area_a + area_b - inter
+    iou = inter / union if union > 0 else 0.0
+    # Also catch containment: one box fully inside the other scores 1.0.
+    iou_min = inter / min(area_a, area_b) if min(area_a, area_b) > 0 else 0.0
+    return max(iou, iou_min)

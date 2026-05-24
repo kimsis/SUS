@@ -46,6 +46,7 @@ class _Track:
     points: np.ndarray
     trajectory: list[tuple[int, int]] = field(default_factory=list)
     age: int = 0
+    prev_bbox_area: int = 0
 
     @property
     def center(self) -> tuple[int, int]:
@@ -92,6 +93,7 @@ class KLTTracker(Tracker):
         max_side: int = 180,
         max_trajectory: int = 60,
         warmup_frames: int = 25,
+        bbox_growth_threshold: float = 1.5,
     ):
         self._cluster_radius = cluster_radius
         self._min_cluster_pts = min_cluster_pts
@@ -102,6 +104,7 @@ class KLTTracker(Tracker):
         self._max_side = max_side
         self._max_trajectory = max_trajectory
         self._warmup_frames = warmup_frames
+        self._bbox_growth_threshold = bbox_growth_threshold
 
         self._mog2 = cv2.createBackgroundSubtractorMOG2(
             history=25, varThreshold=5, detectShadows=False
@@ -154,9 +157,14 @@ class KLTTracker(Tracker):
         # --- Track existing points with LK ---
         if self._prev_gray is not None and self._tracks:
             self._lk_update(gray)
+            self._split_tracks()
             # Drop tracks that have drifted off a real moving object.
             self._tracks = [t for t in self._tracks
                             if self._has_foreground_support(t, fg_mask)]
+            # Kill tracks that have grown beyond the size limits.
+            self._tracks = [t for t in self._tracks if self._is_valid_size(t)]
+            # Suppress duplicate/overlapping tracks.
+            self._suppress_overlapping()
 
         # --- Periodically (re-)detect features in unoccupied foreground ---
         if self._frame_count % self._redetect_every == 1 or not self._tracks:
@@ -255,6 +263,80 @@ class KLTTracker(Tracker):
                 return True
         return False
 
+    def _is_valid_size(self, t: "_Track") -> bool:
+        x1, y1, x2, y2 = t.bbox
+        w, h = x2 - x1, y2 - y1
+        if w > self._max_side or h > self._max_side:
+            return False
+        if w * h > self._max_blob_area:
+            return False
+        return True
+
+    def _suppress_overlapping(self, suppress_iou: float = 0.4):
+        """Greedy NMS: keep older/more established tracks, drop overlapping duplicates."""
+        sorted_tracks = sorted(self._tracks, key=lambda t: t.age, reverse=True)
+        kept = []
+        for candidate in sorted_tracks:
+            for keeper in kept:
+                if _iou_with_containment(candidate.bbox, keeper.bbox) >= suppress_iou:
+                    break
+            else:
+                kept.append(candidate)
+        self._tracks = kept
+
+    def _cluster_points(self, points: np.ndarray) -> list[np.ndarray]:
+        """Connected-components clustering by distance threshold (cluster_radius)."""
+        n = len(points)
+        visited = [False] * n
+        clusters = []
+        for i in range(n):
+            if visited[i]:
+                continue
+            cluster = [i]
+            visited[i] = True
+            queue = [i]
+            while queue:
+                idx = queue.pop()
+                for j in range(n):
+                    if not visited[j]:
+                        if np.linalg.norm(points[idx] - points[j]) <= self._cluster_radius:
+                            visited[j] = True
+                            cluster.append(j)
+                            queue.append(j)
+            clusters.append(points[cluster])
+        return clusters
+
+    def _split_tracks(self):
+        """Split a track only when its bbox has grown significantly — indicating
+        two objects are diverging rather than a single object with sparse features."""
+        new_tracks = []
+        for t in self._tracks:
+            x1, y1, x2, y2 = t.bbox
+            current_area = max(1, (x2 - x1) * (y2 - y1))
+            growing = (t.prev_bbox_area > 0 and
+                       current_area > t.prev_bbox_area * self._bbox_growth_threshold)
+            t.prev_bbox_area = current_area
+
+            if not growing:
+                new_tracks.append(t)
+                continue
+
+            clusters = self._cluster_points(t.points)
+            if len(clusters) <= 1:
+                new_tracks.append(t)
+                continue
+
+            clusters.sort(key=len, reverse=True)
+            t.points = clusters[0].astype(np.float32)
+            t.prev_bbox_area = 0  # reset so child tracks start fresh
+            new_tracks.append(t)
+            for pts in clusters[1:]:
+                if len(pts) >= self._min_cluster_pts:
+                    new_t = _Track(id=self._next_id, points=pts.astype(np.float32))
+                    self._next_id += 1
+                    new_tracks.append(new_t)
+        self._tracks = new_tracks
+
     def _has_foreground_support(self, t: "_Track", fg_mask: np.ndarray,
                                 min_fg_fraction: float = 0.04) -> bool:
         """Return True if the track's bbox contains enough foreground pixels."""
@@ -280,3 +362,19 @@ class KLTTracker(Tracker):
                 cv2.circle(viz, (int(pt[0]), int(pt[1])), 2, color, -1)
 
         self._viz = viz
+
+
+def _iou_with_containment(a: tuple, b: tuple) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    if inter == 0:
+        return 0.0
+    area_a = (ax2 - ax1) * (ay2 - ay1)
+    area_b = (bx2 - bx1) * (by2 - by1)
+    union = area_a + area_b - inter
+    iou = inter / union if union > 0 else 0.0
+    iou_min = inter / min(area_a, area_b) if min(area_a, area_b) > 0 else 0.0
+    return max(iou, iou_min)

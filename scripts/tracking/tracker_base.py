@@ -8,14 +8,16 @@ def clean_mask(mask: np.ndarray) -> np.ndarray:
     """
     Standard MOG2 mask cleanup shared by all trackers.
     Mirrors the pre/post processing from FrameDifferencing:
-    1. GaussianBlur  — smooths noisy edges (pre-processing equivalent).
+    1. GaussianBlur  — smooths noisy edges (pre-processing).
     2. Re-threshold  — restores a clean binary mask after blurring.
     3. Dilate        — connects nearby blobs into solid object silhouettes.
     """
     mask = cv2.GaussianBlur(mask, (7, 7), 0)
     _, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    mask = cv2.dilate(mask, kernel, iterations=2)
+    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_open)
+    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    mask = cv2.dilate(mask, kernel_dilate, iterations=2)
     return mask
 
 
